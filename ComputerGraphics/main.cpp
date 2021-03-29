@@ -33,12 +33,6 @@ outColor = vec4(Color, 1.0);
 }
 )glsl";
 
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
-float rotation = 0;
-
 void cube(int buffer) {
 	int points = 36;
 
@@ -90,26 +84,94 @@ void cube(int buffer) {
 	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * points * 6, vertices, GL_STATIC_DRAW);
 }
 
-void setCam(GLint _uView, double deltaTime) {
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
-	float cameraSpeed = 0.0009f;
+float rotation = 0;
+sf::Vector2i last{0, 0};
+double yaw = -90;
+double pitch = 0;
 
+void setCam(GLint _uView, double deltaTime, const sf::Window& window) {
+	float keyboardCameraSpeed = 3.f * deltaTime;
+	float mouseCameraSpeed = 10.f * deltaTime;
+	//PORUSZANIE KLAWIATUR¥
 	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
-		cameraPos += cameraSpeed * cameraFront;
+		cameraPos += keyboardCameraSpeed * cameraFront;
 	}
 	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
-		cameraPos -= cameraSpeed * cameraFront;
+		cameraPos -= keyboardCameraSpeed * cameraFront;
 	}
 	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
-		rotation -= cameraSpeed;
-		cameraFront.x = sin(rotation);
-		cameraFront.z = -cos(rotation);
+		cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * keyboardCameraSpeed;
+
+		//rotation -= cameraSpeed;
+		//cameraFront.x = sin(rotation);
+		//cameraFront.z = -cos(rotation);
 	}
 	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
-		rotation += cameraSpeed;
-		cameraFront.x = sin(rotation);
-		cameraFront.z = -cos(rotation);
+		cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * keyboardCameraSpeed;
+		//rotation += cameraSpeed;
+		//cameraFront.x = sin(rotation);
+		//cameraFront.z = -cos(rotation);
 	}
+
+	//PORUSZANIE MYSZ¥
+	sf::Vector2i localPosition = sf::Mouse::getPosition(window);
+
+	sf::Vector2i position;
+	bool relocation = false;
+	if (localPosition.x <= 0) {
+		position.x = window.getSize().x;
+		position.y = localPosition.y;
+		relocation = true;
+	}
+	if (localPosition.x >= window.getSize().x - 1) {
+		position.x = 0;
+		position.y = localPosition.y;
+		relocation = true;
+	}
+	if (localPosition.y <= 0) {
+		position.x = localPosition.x;
+		position.y = window.getSize().y;
+		relocation = true;
+	}
+	if (localPosition.y >= window.getSize().y - 1) {
+		position.x = localPosition.y;
+		position.y = 0;
+		relocation = true;
+	}
+
+	if (relocation) {
+		sf::Mouse::setPosition(position);
+	}
+	localPosition = sf::Mouse::getPosition(window);
+	
+	sf::Vector2i offset = localPosition - last;
+	if (relocation)
+		offset = { 0, 0 };
+	last = localPosition;
+
+	double sensitivity = 0.1f;
+	//double cameraSpeed = 0.005f * deltaTime;
+
+	offset.x *= sensitivity;
+	offset.y *= sensitivity;
+
+	yaw += offset.x * mouseCameraSpeed;
+	pitch -= offset.y * mouseCameraSpeed;
+
+	if (pitch > 89.0f)
+		pitch = 89.0f;
+	if (pitch < -89.0f)
+		pitch = -89.0f;
+
+	glm::vec3 front;
+	front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+	front.y = sin(glm::radians(pitch));
+	front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+	cameraFront = glm::normalize(front);
 
 	glm::mat4 view;
 	view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
@@ -158,7 +220,10 @@ int main()
 
 	// Okno renderingu
 	sf::Window window(sf::VideoMode(800, 800, 32), "Tomasz_Ligeza_GK", sf::Style::Titlebar | sf::Style::Close, settings);
+	//sf::Window window(sf::VideoMode(1920, 1080, 32), "Tomasz_Ligeza_GK", sf::Style::Fullscreen | sf::Style::Close, settings);
 	window.setFramerateLimit(60);
+	window.setMouseCursorGrabbed(true);
+	window.setMouseCursorVisible(false);
 
 	// Inicjalizacja GLEW
 	glewExperimental = GL_TRUE;
@@ -250,8 +315,9 @@ int main()
 	glEnable(GL_DEPTH_TEST);
 
 	sf::Clock clock;
-	double deltaTime = 0.0; clock.getElapsedTime().asSeconds();
-	clock.restart();
+	double deltaTime = 0.f;
+
+	int licznik = 0;
 	int primitive = GL_TRIANGLE_FAN;
 	// Rozpoczêcie pêtli zdarzeñ
 	bool running = true;
@@ -315,10 +381,17 @@ int main()
 				break;
 			}
 		}
-		deltaTime = clock.getElapsedTime().asSeconds();
-		clock.restart();
 
-		setCam(uniView, deltaTime);
+		licznik++;
+		deltaTime = clock.restart().asSeconds();
+
+		float fps = 1 / deltaTime;
+		if (licznik >= fps) {
+			window.setTitle(std::to_string(fps));
+			licznik = 0;
+		}
+
+		setCam(uniView, deltaTime, window);
 
 		// Nadanie scenie koloru czarnego
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
