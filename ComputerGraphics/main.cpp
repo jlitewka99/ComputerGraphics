@@ -2,6 +2,9 @@
 #include <SFML\Graphics.hpp>
 #include <GL\glew.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <SFML/System/Time.hpp>
 
 
 // Kody shaderów
@@ -10,11 +13,12 @@ const GLchar* vertexSource = R"glsl(
 in vec3 position;
 in vec3 color;
 out vec3 Color;
+        uniform mat4 model;
+        uniform mat4 view;
+        uniform mat4 proj;
 void main(){
 Color = color;
-
-gl_Position = vec4(position, 1.0);
-
+gl_Position = proj * view * model * vec4(position, 1.0);
 }
 )glsl";
 
@@ -22,20 +26,95 @@ const GLchar* fragmentSource = R"glsl(
 #version 150 core
 in vec3 Color;
 out vec4 outColor;
+ 
 void main()
 {
 outColor = vec4(Color, 1.0);
 }
 )glsl";
 
-const GLchar* fragmentSource_white = R"gls1(
-#version 150 core
-out vec4 outColor;
-void main()
-{
-outColor = vec4(1.0, 1.0, 1.0, 1.0);
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+float rotation = 0;
+
+void cube(int buffer) {
+	int points = 36;
+
+	float vertices[] = {
+			-0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
+			0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
+			0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
+			0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
+			-0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
+			-0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
+
+			-0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
+			0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
+			0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
+			0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
+			-0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
+			-0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
+
+			-0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 1.0f,
+			-0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,
+			-0.5f, -0.5f, -0.5f,  0.0f, 0.0f, 1.0f,
+			-0.5f, -0.5f, -0.5f,  0.0f, 0.0f, 1.0f,
+			-0.5f, -0.5f,  0.5f,  0.0f, 0.0f, 1.0f,
+			-0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 1.0f,
+
+			0.5f,  0.5f,  0.5f,  0.0f, 0.5f, 1.0f,
+			0.5f,  0.5f, -0.5f,  0.0f, 0.5f, 1.0f,
+			0.5f, -0.5f, -0.5f,  0.0f, 0.5f, 1.0f,
+			0.5f, -0.5f, -0.5f,  0.0f, 0.5f, 1.0f,
+			0.5f, -0.5f,  0.5f,  0.0f, 0.5f, 1.0f,
+			0.5f,  0.5f,  0.5f,  0.0f, 0.5f, 1.0f,
+
+			-0.5f, -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,
+			0.5f, -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,
+			0.5f, -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,
+			0.5f, -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,
+			-0.5f, -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,
+			-0.5f, -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,
+
+			-0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.5f,
+			0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.5f,
+			0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,
+			0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,
+			-0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,
+			-0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.5f
+	};
+
+	glBindBuffer(GL_ARRAY_BUFFER, buffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * points * 6, vertices, GL_STATIC_DRAW);
 }
-)gls1";
+
+void setCam(GLint _uView, double deltaTime) {
+
+	float cameraSpeed = 0.0009f;
+
+	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
+		cameraPos += cameraSpeed * cameraFront;
+	}
+	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
+		cameraPos -= cameraSpeed * cameraFront;
+	}
+	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
+		rotation -= cameraSpeed;
+		cameraFront.x = sin(rotation);
+		cameraFront.z = -cos(rotation);
+	}
+	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
+		rotation += cameraSpeed;
+		cameraFront.x = sin(rotation);
+		cameraFront.z = -cos(rotation);
+	}
+
+	glm::mat4 view;
+	view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+	glUniformMatrix4fv(_uView, 1, GL_FALSE, glm::value_ptr(view));
+}
 
 
 void updateGPUData(int numberOfVertices) {
@@ -78,7 +157,8 @@ int main()
 	settings.stencilBits = 8;
 
 	// Okno renderingu
-	sf::Window window(sf::VideoMode(800, 800, 32), "OpenGL", sf::Style::Titlebar | sf::Style::Close, settings);
+	sf::Window window(sf::VideoMode(800, 800, 32), "Tomasz_Ligeza_GK", sf::Style::Titlebar | sf::Style::Close, settings);
+	window.setFramerateLimit(60);
 
 	// Inicjalizacja GLEW
 	glewExperimental = GL_TRUE;
@@ -94,8 +174,7 @@ int main()
 	GLuint vbo;
 	glGenBuffers(1, &vbo);
 
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	//glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	cube(vbo);
 
 	// Utworzenie i skompilowanie shadera wierzcho³ków
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -142,25 +221,38 @@ int main()
 	GLuint shaderProgram = glCreateProgram();
 	glAttachShader(shaderProgram, vertexShader);
 	glAttachShader(shaderProgram, fragmentShader);
-	//glBindFragDataLocation(shaderProgram, 0, "outColor");
+
 	glLinkProgram(shaderProgram);
 	glUseProgram(shaderProgram);
 
 
 	// Specifikacja formatu danych wierzcho³kowych
+
 	GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
 	glEnableVertexAttribArray(posAttrib);
 	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), 0);
-
 	GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
 	glEnableVertexAttribArray(colAttrib);
 	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
 
+	glm::mat4 model = glm::mat4(1.0f);
+	model = glm::rotate(model, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
+	GLint uniTrans = glGetUniformLocation(shaderProgram, "model");
+	glUniformMatrix4fv(uniTrans, 1, GL_FALSE, glm::value_ptr(model));
+
+	GLint uniView = glGetUniformLocation(shaderProgram, "view");
+
+	glm::mat4 proj = glm::perspective(glm::radians(45.0f), 800.0f / 800.0f, 0.06f, 100.0f);
+	GLint uniProj = glGetUniformLocation(shaderProgram, "proj");
+	glUniformMatrix4fv(uniProj, 1, GL_FALSE, glm::value_ptr(proj));
+
+	glEnable(GL_DEPTH_TEST);
+
+	sf::Clock clock;
+	double deltaTime = 0.0; clock.getElapsedTime().asSeconds();
+	clock.restart();
 	int primitive = GL_TRIANGLE_FAN;
-	int numberOfVertices = 3;
-
-	int prevMouse = 0;
 	// Rozpoczêcie pêtli zdarzeñ
 	bool running = true;
 	while (running) {
@@ -170,17 +262,6 @@ int main()
 			case sf::Event::Closed:
 				running = false;
 				break;
-			case sf::Event::MouseMoved: {
-				if (windowEvent.mouseMove.y < prevMouse) {
-					numberOfVertices++;
-				}
-				else {
-					if (numberOfVertices - 1 >= 3)
-						numberOfVertices--;
-				}
-				prevMouse = windowEvent.mouseMove.y;
-				break;
-			}
 			case sf::Event::KeyPressed:
 				switch (windowEvent.key.code) {
 				case sf::Keyboard::Escape: {
@@ -234,19 +315,22 @@ int main()
 				break;
 			}
 		}
+		deltaTime = clock.getElapsedTime().asSeconds();
+		clock.restart();
+
+		setCam(uniView, deltaTime);
+
 		// Nadanie scenie koloru czarnego
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
-
-		//send data to gpu
-		updateGPUData(numberOfVertices);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		//DRAWING
-		std::cout << numberOfVertices << "\t" << sf::Mouse::getPosition().y  << "\n";
-		glDrawArrays(primitive, 0, numberOfVertices);
+		glDrawArrays(primitive, 0, 36);
 		// Wymiana buforów tylni/przedni
 		window.display();
 	}
+
+
 	// Kasowanie programu i czyszczenie buforów
 	glDeleteProgram(shaderProgram);
 	glDeleteShader(fragmentShader);
@@ -255,5 +339,6 @@ int main()
 	glDeleteVertexArrays(1, &vao);
 	// Zamkniêcie okna renderingu
 	window.close();
+
 	return 0;
 }
