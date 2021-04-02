@@ -118,6 +118,7 @@ void setCam(GLint _uView, double deltaTime, const sf::Window& window) {
 	}
 
 	//PORUSZANIE MYSZ¥
+	//TO JEST MEGA CIULOWE, NIE MO¯NA ZROBIÆ ALT+TAB
 	sf::Vector2i localPosition = sf::Mouse::getPosition(window);
 
 	sf::Vector2i position;
