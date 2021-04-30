@@ -6,6 +6,10 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <SFML/System/Time.hpp>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+
 
 // Kody shaderów
 const GLchar* vertexSource = R"glsl(
@@ -13,10 +17,13 @@ const GLchar* vertexSource = R"glsl(
 in vec3 position;
 in vec3 color;
 out vec3 Color;
+in vec2 aTexCoord;
+out vec2 TexCoord;
         uniform mat4 model;
         uniform mat4 view;
         uniform mat4 proj;
 void main(){
+TexCoord = aTexCoord;
 Color = color;
 gl_Position = proj * view * model * vec4(position, 1.0);
 }
@@ -26,45 +33,50 @@ const GLchar* fragmentSource = R"glsl(
 #version 150 core
 in vec3 Color;
 out vec4 outColor;
- 
+in vec2 TexCoord;
+
+uniform sampler2D texture1;
+uniform sampler2D texture2;
+
 void main()
 {
-outColor = vec4(Color, 1.0);
+outColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.5);
+//outColor = vec4(Color, 1.0);
 }
 )glsl";
 
 void cube(int buffer) {
-	int points = 36;
+	int points = 24;
 
 	float vertices[] = {
-			-0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
-			0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
-			0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
-			0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
-			-0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
-			-0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
+			-0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+			0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f, 3.0f, 0.0f,
+			0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f, 3.0f, 3.0f,
+			0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f, 3.0f, 3.0f,
+			-0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f, 0.0f, 3.0f,
+			-0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
 
-			-0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
-			0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
-			0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
-			0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
-			-0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
-			-0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
+			-0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+			0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+			0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+			0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+			-0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+			-0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
 
-			-0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 1.0f,
-			-0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,
-			-0.5f, -0.5f, -0.5f,  0.0f, 0.0f, 1.0f,
-			-0.5f, -0.5f, -0.5f,  0.0f, 0.0f, 1.0f,
-			-0.5f, -0.5f,  0.5f,  0.0f, 0.0f, 1.0f,
-			-0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 1.0f,
+			-0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+			-0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f, 1.0f, 0.0f,
+			-0.5f, -0.5f, -0.5f,  0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+			-0.5f, -0.5f, -0.5f,  0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+			-0.5f, -0.5f,  0.5f,  0.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+			-0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
 
-			0.5f,  0.5f,  0.5f,  0.0f, 0.5f, 1.0f,
-			0.5f,  0.5f, -0.5f,  0.0f, 0.5f, 1.0f,
-			0.5f, -0.5f, -0.5f,  0.0f, 0.5f, 1.0f,
-			0.5f, -0.5f, -0.5f,  0.0f, 0.5f, 1.0f,
-			0.5f, -0.5f,  0.5f,  0.0f, 0.5f, 1.0f,
-			0.5f,  0.5f,  0.5f,  0.0f, 0.5f, 1.0f,
-
+			0.5f,  0.5f,  0.5f,  0.0f, 0.5f, 1.0f, 0.0f, 0.0f,
+			0.5f,  0.5f, -0.5f,  0.0f, 0.5f, 1.0f, 1.0f, 0.0f,
+			0.5f, -0.5f, -0.5f,  0.0f, 0.5f, 1.0f, 1.0f, 1.0f,
+			0.5f, -0.5f, -0.5f,  0.0f, 0.5f, 1.0f, 1.0f, 1.0f,
+			0.5f, -0.5f,  0.5f,  0.0f, 0.5f, 1.0f, 0.0f, 1.0f,
+			0.5f,  0.5f,  0.5f,  0.0f, 0.5f, 1.0f, 0.0f, 0.0f,
+			/*
 			-0.5f, -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,
 			0.5f, -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,
 			0.5f, -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,
@@ -78,10 +90,11 @@ void cube(int buffer) {
 			0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,
 			-0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,
 			-0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.5f
+			*/
 	};
 
 	glBindBuffer(GL_ARRAY_BUFFER, buffer);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * points * 6, vertices, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * points * 8, vertices, GL_STATIC_DRAW);
 }
 
 glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
@@ -296,10 +309,16 @@ int main()
 
 	GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
 	glEnableVertexAttribArray(posAttrib);
-	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), 0);
+	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), 0);
+
 	GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
 	glEnableVertexAttribArray(colAttrib);
-	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
+	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
+
+	GLint TexCoords = glGetAttribLocation(shaderProgram, "aTexCoord");
+	glEnableVertexAttribArray(TexCoords);
+	glVertexAttribPointer(TexCoords, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
+
 
 	glm::mat4 model = glm::mat4(1.0f);
 	model = glm::rotate(model, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -315,11 +334,65 @@ int main()
 
 	glEnable(GL_DEPTH_TEST);
 
+	unsigned int texture1;
+	glGenTextures(1, &texture1);
+	glBindTexture(GL_TEXTURE_2D, texture1);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	int width;
+	int height;
+	int nrChannel;
+
+	stbi_set_flip_vertically_on_load(true);
+
+	unsigned char* data = stbi_load("textures/1.jpg", &width, &height, &nrChannel, 0);
+
+	if (data) {
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+	else {
+		std::cout << "something went wrong\n";
+	}
+	stbi_image_free(data);
+
+	unsigned int texture2;
+	glGenTextures(1, &texture2);
+	glBindTexture(GL_TEXTURE_2D, texture2);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	stbi_set_flip_vertically_on_load(true);
+
+	data = stbi_load("textures/2.jpg", &width, &height, &nrChannel, 0);
+
+	if (data) {
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+	else {
+		std::cout << "something went wrong\n";
+	}
+	stbi_image_free(data);
+
+	glUniform1f(glGetUniformLocation(shaderProgram, "texture1"), 0);
+	glUniform1f(glGetUniformLocation(shaderProgram, "texture2"), 1);
+
+
 	sf::Clock clock;
 	double deltaTime = 0.f;
 
-	int licznik = 0;
-	int primitive = GL_TRIANGLE_FAN;
+	int counter = 0;
+	int primitive = GL_TRIANGLES;
 	// Rozpoczêcie pêtli zdarzeñ
 	bool running = true;
 	while (running) {
@@ -383,13 +456,13 @@ int main()
 			}
 		}
 
-		licznik++;
+		counter++;
 		deltaTime = clock.restart().asSeconds();
 
 		float fps = 1 / deltaTime;
-		if (licznik >= fps) {
+		if (counter >= fps) {
 			window.setTitle(std::to_string(fps));
-			licznik = 0;
+			counter = 0;
 		}
 
 		setCam(uniView, deltaTime, window);
@@ -398,8 +471,14 @@ int main()
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, texture1);
+
+		glDrawArrays(GL_TRIANGLES, 0, 12);
+		glBindTexture(GL_TEXTURE_2D, texture2);
+
 		//DRAWING
-		glDrawArrays(primitive, 0, 36);
+		glDrawArrays(primitive, 12, 24);
 		// Wymiana buforów tylni/przedni
 		window.display();
 	}
