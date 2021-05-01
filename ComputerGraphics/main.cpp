@@ -46,7 +46,7 @@ outColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.5);
 )glsl";
 
 void cube(int buffer) {
-	int points = 24;
+	int points = 36;
 
 	float vertices[] = {
 			-0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
@@ -76,21 +76,20 @@ void cube(int buffer) {
 			0.5f, -0.5f, -0.5f,  0.0f, 0.5f, 1.0f, 1.0f, 1.0f,
 			0.5f, -0.5f,  0.5f,  0.0f, 0.5f, 1.0f, 0.0f, 1.0f,
 			0.5f,  0.5f,  0.5f,  0.0f, 0.5f, 1.0f, 0.0f, 0.0f,
-			/*
-			-0.5f, -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,
-			0.5f, -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,
-			0.5f, -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,
-			0.5f, -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,
-			-0.5f, -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,
-			-0.5f, -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,
+			
+			-0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+			0.5f, -0.5f, -0.5f,  1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+			0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+			0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+			-0.5f, -0.5f,  0.5f,  0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+			-0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
 
-			-0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.5f,
-			0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.5f,
-			0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,
-			0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,
-			-0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,
-			-0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.5f
-			*/
+			-0.5f,  0.5f, -0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+			0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+			0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+			0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+			-0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+			-0.5f,  0.5f, -0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f
 	};
 
 	glBindBuffer(GL_ARRAY_BUFFER, buffer);
@@ -226,6 +225,33 @@ void updateGPUData(int numberOfVertices) {
 
 }
 
+void StereoProjection(GLuint shaderProgram_, float _left, float _right, float _bottom, float _top, float _near, float _far, float _zero_plane, float _dist, float _eye)
+{
+	float   _dx = _right - _left;
+	float   _dy = _top - _bottom;
+
+	float   _xmid = (_right + _left) / 2.0;
+	float   _ymid = (_top + _bottom) / 2.0;
+
+	float   _clip_near = _dist + _zero_plane - _near;
+	float   _clip_far = _dist + _zero_plane - _far;
+
+	float  _n_over_d = _clip_near / _dist;
+
+	float   _topw = _n_over_d * _dy / 2.0;
+	float   _bottomw = -_topw;
+	float   _rightw = _n_over_d * (_dx / 2.0 - _eye);
+	float   _leftw = _n_over_d * (-_dx / 2.0 - _eye);
+
+	glm::mat4 proj = glm::frustum(_leftw, _rightw, _bottomw, _topw, _clip_near, _clip_far);
+
+	proj = glm::translate(proj, glm::vec3(-_xmid - _eye, -_ymid, 0));
+
+	GLint uniProj = glGetUniformLocation(shaderProgram_, "proj");
+	glUniformMatrix4fv(uniProj, 1, GL_FALSE, glm::value_ptr(proj));
+}
+
+
 int main()
 {
 	sf::ContextSettings settings;
@@ -359,7 +385,7 @@ int main()
 	else {
 		std::cout << "something went wrong\n";
 	}
-	stbi_image_free(data);
+	stbi_image_free(data);	
 
 	unsigned int texture2;
 	glGenTextures(1, &texture2);
@@ -394,6 +420,13 @@ int main()
 	int counter = 0;
 	int primitive = GL_TRIANGLES;
 	// Rozpoczêcie pêtli zdarzeñ
+
+	int mode = 1;
+	float dist = 13;
+	float zeroPlane = 0;
+	float eye = 0.05;
+
+
 	bool running = true;
 	while (running) {
 		sf::Event windowEvent;
@@ -450,6 +483,33 @@ int main()
 					primitive = GL_POLYGON;
 					break;
 				}
+				case sf::Keyboard::Q:
+					dist += 0.1;
+					break;
+				case sf::Keyboard::W:
+					dist -= 0.1;
+					break;
+				case sf::Keyboard::A:
+					zeroPlane += 0.1;
+					break;
+				case sf::Keyboard::S:
+					zeroPlane -= 0.1;
+					break;
+				case sf::Keyboard::Z:
+					eye += 0.005;
+					break;
+				case sf::Keyboard::X:
+					eye -= 0.005;
+					break;
+				case sf::Keyboard::Num1:
+					mode = 1;
+					break;
+				case sf::Keyboard::Num2:
+					mode = 2;
+					break;
+				case sf::Keyboard::Num3:
+					mode = 3;
+					break;
 				}
 				}
 				break;
@@ -471,14 +531,67 @@ int main()
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, texture1);
-
-		glDrawArrays(GL_TRIANGLES, 0, 12);
-		glBindTexture(GL_TEXTURE_2D, texture2);
-
+		
+		//2glActiveTexture(GL_TEXTURE0);
+		//glBindTexture(GL_TEXTURE_2D, texture1);
+		//glDrawArrays(GL_TRIANGLES, 0, 12);
 		//DRAWING
-		glDrawArrays(primitive, 12, 24);
+		//glBindTexture(GL_TEXTURE_2D, texture2);
+		//glDrawArrays(primitive, 12, 36);
+
+		switch (mode) {
+		case 1:
+			glViewport(0, 0, window.getSize().x, window.getSize().y);
+			glDrawBuffer(GL_BACK_LEFT);
+			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, zeroPlane, dist, eye);
+			
+			glColorMask(true, false, false, false);
+
+			glBindTexture(GL_TEXTURE_2D, texture1);
+			glDrawArrays(primitive, 0, 12);
+
+			glBindTexture(GL_TEXTURE_2D, texture2);
+			glDrawArrays(primitive, 12, 36);
+
+			glClear(GL_DEPTH_BUFFER_BIT);
+			glDrawBuffer(GL_BACK_RIGHT);
+			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, zeroPlane, dist, -eye);
+			
+			glColorMask(false, false, true, false);
+
+			glBindTexture(GL_TEXTURE_2D, texture1);
+			glDrawArrays(primitive, 0, 12);
+
+			glBindTexture(GL_TEXTURE_2D, texture2);
+			glDrawArrays(primitive, 12, 36);
+			glColorMask(true, true, true, true);
+			break;
+		case 2:
+			glViewport(0, 0, window.getSize().x / 2, window.getSize().y);
+			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, zeroPlane, dist, eye);
+
+			glBindTexture(GL_TEXTURE_2D, texture1);
+			glDrawArrays(primitive, 0, 12);
+			glBindTexture(GL_TEXTURE_2D, texture2);
+			glDrawArrays(primitive, 12, 36);
+
+			glViewport(window.getSize().x / 2, 0, window.getSize().x / 2, window.getSize().y);
+			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, zeroPlane, dist, -eye);
+			glBindTexture(GL_TEXTURE_2D, texture1);
+			glDrawArrays(primitive, 0, 12);
+			glBindTexture(GL_TEXTURE_2D, texture2);
+			glDrawArrays(primitive, 12, 36);
+			break;
+		case 3:
+			glViewport(0, 0, window.getSize().x, window.getSize().y);
+			glBindTexture(GL_TEXTURE_2D, texture1);
+			glDrawArrays(primitive, 0, 12);
+
+			glBindTexture(GL_TEXTURE_2D, texture2);
+			glDrawArrays(primitive, 12, 36);
+			break;
+		}
+
 		// Wymiana buforów tylni/przedni
 		window.display();
 	}
