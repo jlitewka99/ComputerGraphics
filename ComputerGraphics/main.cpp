@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <SFML/System/Time.hpp>
+#include <fstream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -40,8 +41,8 @@ uniform sampler2D texture2;
 
 void main()
 {
-outColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.5);
-//outColor = vec4(Color, 1.0);
+//outColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.5);
+outColor = vec4(Color, 1.0);
 }
 )glsl";
 
@@ -251,6 +252,66 @@ void StereoProjection(GLuint shaderProgram_, float _left, float _right, float _b
 	glUniformMatrix4fv(uniProj, 1, GL_FALSE, glm::value_ptr(proj));
 }
 
+void loadModelOBJ(int& points, char* filename, int buffer) {
+
+}  
+
+void loadModelOBJ_EBO(int& points, const char* filename, int buffer_vbo, int buffer_ebo) {
+	int vert_num = 0;
+	int trian_num = 0;
+
+	std::ifstream file;
+	file.open(filename);
+
+	std::string output;
+
+	if (file.is_open()) {
+		while (!file.eof()) {
+			file >> output;
+			if (output == "v") vert_num++;
+			if (output == "f") trian_num++;
+		}
+	}
+
+	file.close();
+	file.open(filename);
+
+	float* vert = new float[vert_num*3];
+	int* elem = new int[trian_num * 3];
+
+
+	int vert_counter = 0;
+	int elem_counter = 0;
+	int tmp = 0;
+
+	while (!file.eof()) {
+		file >> output;
+		if (output == "v") {
+			for (int i = 0; i < 3; i++) {
+				file >> vert[vert_counter++];
+			}
+		}
+		if (output == "f") {
+			for (int i = 0; i < 3; i++) {
+				file >> tmp; 
+				elem[elem_counter++] = (tmp - 1);
+			}
+		}
+		output.clear();
+	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, buffer_vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * vert_num * 3, vert, GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_ebo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * trian_num * 3, elem, GL_STATIC_DRAW);
+
+	points = trian_num * 3;
+	std::cout << "number of points: " << points << "\n";
+	delete[] vert;
+	delete[] elem;
+}
+
 
 int main()
 {
@@ -274,12 +335,21 @@ int main()
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 
+
+	int points = 0;
+
+	GLuint ebo;
+	glGenBuffers(1, &ebo);
+	
+
+
 	// Utworzenie VBO (Vertex Buffer Object)
 	// i skopiowanie do niego danych wierzcho³kowych
 	GLuint vbo;
 	glGenBuffers(1, &vbo);
 
-	cube(vbo);
+	loadModelOBJ_EBO(points, "object/scene.obj", vbo, ebo);
+	//cube(vbo);
 
 	// Utworzenie i skompilowanie shadera wierzcho³ków
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -358,7 +428,7 @@ int main()
 	GLint uniProj = glGetUniformLocation(shaderProgram, "proj");
 	glUniformMatrix4fv(uniProj, 1, GL_FALSE, glm::value_ptr(proj));
 
-	glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_DEPTH_TEST);
 
 	unsigned int texture1;
 	glGenTextures(1, &texture1);
@@ -421,7 +491,7 @@ int main()
 	int primitive = GL_TRIANGLES;
 	// Rozpoczêcie pêtli zdarzeñ
 
-	int mode = 1;
+	int mode = 3;
 	float dist = 13;
 	float zeroPlane = 0;
 	float eye = 0.05;
@@ -584,11 +654,14 @@ int main()
 			break;
 		case 3:
 			glViewport(0, 0, window.getSize().x, window.getSize().y);
-			glBindTexture(GL_TEXTURE_2D, texture1);
-			glDrawArrays(primitive, 0, 12);
 
-			glBindTexture(GL_TEXTURE_2D, texture2);
-			glDrawArrays(primitive, 12, 36);
+			//glDrawArrays(primitive, 0, points);
+			glDrawElements(primitive, points, GL_UNSIGNED_INT, 0);
+			//glBindTexture(GL_TEXTURE_2D, texture1);
+			//glDrawArrays(primitive, 0, 12);
+
+			//glBindTexture(GL_TEXTURE_2D, texture2);
+			//glDrawArrays(primitive, 12, 36);
 			break;
 		}
 
