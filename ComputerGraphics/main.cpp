@@ -252,8 +252,85 @@ void StereoProjection(GLuint shaderProgram_, float _left, float _right, float _b
 	glUniformMatrix4fv(uniProj, 1, GL_FALSE, glm::value_ptr(proj));
 }
 
-void loadModelOBJ(int& points, char* filename, int buffer) {
+void loadModelOBJ(int& points, const char* filename, int buffer) {
+	int vert_num = 0;
+	int trian_num = 0;
 
+	std::ifstream myReadFile;
+	myReadFile.open(filename);
+
+	std::string output;
+
+	if (myReadFile.is_open()) {
+		while (!myReadFile.eof()) {
+			myReadFile >> output;
+			if (output == "v") vert_num++;
+			if (output == "f") trian_num++;
+		}
+	}
+
+	myReadFile.close();
+	myReadFile.open(filename);
+
+	float** vert = new float* [vert_num];
+	for (int k = 0; k < vert_num; k++)
+		vert[k] = new float[3];
+
+	int** trian = new int* [trian_num];
+	for (int k = 0; k < trian_num; k++)
+		trian[k] = new int[3];
+
+	int licz_vert = 0;
+	int licz_elem = 0;
+
+	while (!myReadFile.eof()) {
+		myReadFile >> output;
+		if (output == "v") {
+			for (int i = 0; i < 3; i++) {
+				myReadFile >> vert[licz_vert][i];
+			}
+			licz_vert++;
+		}
+		if (output == "f") {
+			for (int i = 0; i < 3; i++) {
+				myReadFile >> trian[licz_elem][i];
+			}
+			licz_elem++;
+		}
+		output.clear();
+	}
+
+	GLfloat* vertices = new GLfloat[trian_num * 9];
+	int vert_current = 0;
+
+	for (int i = 0; i < trian_num; i++) {
+		vertices[vert_current + 0] = vert[trian[i][0] - 1][0];
+		vertices[vert_current + 1] = vert[trian[i][0] - 1][1];
+		vertices[vert_current + 2] = vert[trian[i][0] - 1][2];
+
+		vertices[vert_current + 3] = vert[trian[i][1] - 1][0];
+		vertices[vert_current + 4] = vert[trian[i][1] - 1][1];
+		vertices[vert_current + 5] = vert[trian[i][1] - 1][2];
+
+		vertices[vert_current + 6] = vert[trian[i][2] - 1][0];
+		vertices[vert_current + 7] = vert[trian[i][2] - 1][1];
+		vertices[vert_current + 8] = vert[trian[i][2] - 1][2];
+
+		vert_current += 9;
+	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, buffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * trian_num * 9, vertices, GL_STATIC_DRAW);
+
+	points = trian_num * 9;
+
+	delete[] vertices;
+	for (int i = 0; i < vert_num; i++)
+		delete[] vert[i];
+	delete[] vert;
+	for (int i = 0; i < vert_num; i++)
+		delete[] trian[i];
+	delete[] trian;
 }  
 
 void loadModelOBJ_EBO(int& points, const char* filename, int buffer_vbo, int buffer_ebo) {
@@ -348,7 +425,7 @@ int main()
 	GLuint vbo;
 	glGenBuffers(1, &vbo);
 
-	loadModelOBJ_EBO(points, "object/scene.obj", vbo, ebo);
+	loadModelOBJ(points, "object/scene.obj", vbo);
 	//cube(vbo);
 
 	// Utworzenie i skompilowanie shadera wierzcho³ków
@@ -405,15 +482,15 @@ int main()
 
 	GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
 	glEnableVertexAttribArray(posAttrib);
-	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), 0);
+	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), 0);
 
 	GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
 	glEnableVertexAttribArray(colAttrib);
-	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
+	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
 
 	GLint TexCoords = glGetAttribLocation(shaderProgram, "aTexCoord");
 	glEnableVertexAttribArray(TexCoords);
-	glVertexAttribPointer(TexCoords, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
+	glVertexAttribPointer(TexCoords, 2, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
 
 
 	glm::mat4 model = glm::mat4(1.0f);
@@ -428,7 +505,7 @@ int main()
 	GLint uniProj = glGetUniformLocation(shaderProgram, "proj");
 	glUniformMatrix4fv(uniProj, 1, GL_FALSE, glm::value_ptr(proj));
 
-	//glEnable(GL_DEPTH_TEST);
+	glEnable(GL_DEPTH_TEST);
 
 	unsigned int texture1;
 	glGenTextures(1, &texture1);
@@ -488,7 +565,7 @@ int main()
 	double deltaTime = 0.f;
 
 	int counter = 0;
-	int primitive = GL_TRIANGLES;
+	int primitive = GL_POINTS;
 	// Rozpoczêcie pêtli zdarzeñ
 
 	int mode = 3;
@@ -601,14 +678,6 @@ int main()
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		
-		//2glActiveTexture(GL_TEXTURE0);
-		//glBindTexture(GL_TEXTURE_2D, texture1);
-		//glDrawArrays(GL_TRIANGLES, 0, 12);
-		//DRAWING
-		//glBindTexture(GL_TEXTURE_2D, texture2);
-		//glDrawArrays(primitive, 12, 36);
-
 		switch (mode) {
 		case 1:
 			glViewport(0, 0, window.getSize().x, window.getSize().y);
@@ -655,13 +724,8 @@ int main()
 		case 3:
 			glViewport(0, 0, window.getSize().x, window.getSize().y);
 
-			//glDrawArrays(primitive, 0, points);
+			glDrawArrays(primitive, 0, points);
 			glDrawElements(primitive, points, GL_UNSIGNED_INT, 0);
-			//glBindTexture(GL_TEXTURE_2D, texture1);
-			//glDrawArrays(primitive, 0, 12);
-
-			//glBindTexture(GL_TEXTURE_2D, texture2);
-			//glDrawArrays(primitive, 12, 36);
 			break;
 		}
 
