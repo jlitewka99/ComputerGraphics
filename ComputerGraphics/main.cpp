@@ -6,6 +6,9 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <SFML/System/Time.hpp>
 #include <fstream>
+#include <string>
+#include <vector>
+#include <sstream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -25,7 +28,7 @@ out vec2 TexCoord;
         uniform mat4 proj;
 void main(){
 TexCoord = aTexCoord;
-Color = color;
+//Color = color;
 gl_Position = proj * view * model * vec4(position, 1.0);
 }
 )glsl";
@@ -42,7 +45,8 @@ uniform sampler2D texture2;
 void main()
 {
 //outColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.5);
-outColor = vec4(Color, 1.0);
+outColor = texture(texture1, TexCoord);
+//outColor = vec4(Color, 1.0);
 }
 )glsl";
 
@@ -77,7 +81,7 @@ void cube(int buffer) {
 			0.5f, -0.5f, -0.5f,  0.0f, 0.5f, 1.0f, 1.0f, 1.0f,
 			0.5f, -0.5f,  0.5f,  0.0f, 0.5f, 1.0f, 0.0f, 1.0f,
 			0.5f,  0.5f,  0.5f,  0.0f, 0.5f, 1.0f, 0.0f, 0.0f,
-			
+
 			-0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
 			0.5f, -0.5f, -0.5f,  1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
 			0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
@@ -101,41 +105,38 @@ glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
-float rotation = 0;
-sf::Vector2i last{0, 0};
+bool firstMouse = true;
+int lastX;
+int lastY;
 double yaw = -90;
 double pitch = 0;
 
-void setCam(GLint _uView, double deltaTime, const sf::Window& window) {
-	float keyboardCameraSpeed = 3.f * deltaTime;
-	float mouseCameraSpeed = 10.f * deltaTime;
-	//PORUSZANIE KLAWIATUR¥
-	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
-		cameraPos += keyboardCameraSpeed * cameraFront;
-	}
-	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
-		cameraPos -= keyboardCameraSpeed * cameraFront;
-	}
-	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
-		cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * keyboardCameraSpeed;
+void moveCamByKeyboard(GLint uniView, float time) {
+	float speed = 0.00001f * time;
 
-		//rotation -= cameraSpeed;
-		//cameraFront.x = sin(rotation);
-		//cameraFront.z = -cos(rotation);
+	if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
+		cameraPos += speed * cameraFront;
 	}
-	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
-		cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * keyboardCameraSpeed;
-		//rotation += cameraSpeed;
-		//cameraFront.x = sin(rotation);
-		//cameraFront.z = -cos(rotation);
+	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
+		cameraPos -= speed * cameraFront;
+	}
+	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) {
+		cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * speed;
+	}
+	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) {
+		cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * speed;
 	}
 
-	//PORUSZANIE MYSZ¥
-	//TO JEST MEGA CIULOWE, NIE MO¯NA ZROBIÆ ALT+TAB
+	glm::mat4 view;
+	view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+	glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
+}
+
+void moveCamByMouse(GLint uniView, float time, const sf::Window& window) {
 	sf::Vector2i localPosition = sf::Mouse::getPosition(window);
-
 	sf::Vector2i position;
 	bool relocation = false;
+
 	if (localPosition.x <= 0) {
 		position.x = window.getSize().x;
 		position.y = localPosition.y;
@@ -147,39 +148,45 @@ void setCam(GLint _uView, double deltaTime, const sf::Window& window) {
 		relocation = true;
 	}
 	if (localPosition.y <= 0) {
-		position.x = localPosition.x;
 		position.y = window.getSize().y;
+		position.x = localPosition.x;
 		relocation = true;
 	}
 	if (localPosition.y >= window.getSize().y - 1) {
-		position.x = localPosition.y;
 		position.y = 0;
+		position.x = localPosition.x;
 		relocation = true;
 	}
 
 	if (relocation) {
-		sf::Mouse::setPosition(position);
+		sf::Mouse::setPosition(position, window);
+		firstMouse = true;
 	}
 	localPosition = sf::Mouse::getPosition(window);
-	
-	sf::Vector2i offset = localPosition - last;
-	if (relocation)
-		offset = { 0, 0 };
-	last = localPosition;
 
-	double sensitivity = 0.1f;
-	//double cameraSpeed = 0.005f * deltaTime;
+	if (firstMouse) {
+		lastX = localPosition.x;
+		lastY = localPosition.y;
+		firstMouse = false;
+	}
 
-	offset.x *= sensitivity;
-	offset.y *= sensitivity;
+	double xoffset = localPosition.x - lastX;
+	double yoffset = localPosition.y - lastY;
+	lastX = localPosition.x;
+	lastY = localPosition.y;
+	double sensitivity = 0.001f;
+	double cameraSpeed = 0.002f * time;
+	xoffset *= sensitivity;
+	yoffset *= sensitivity;
+	yaw += xoffset * cameraSpeed;
+	pitch -= yoffset * cameraSpeed;
 
-	yaw += offset.x * mouseCameraSpeed;
-	pitch -= offset.y * mouseCameraSpeed;
-
-	if (pitch > 89.0f)
+	if (pitch > 89.0f) {
 		pitch = 89.0f;
-	if (pitch < -89.0f)
+	}
+	if (pitch < -89.0f) {
 		pitch = -89.0f;
+	}
 
 	glm::vec3 front;
 	front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
@@ -189,9 +196,8 @@ void setCam(GLint _uView, double deltaTime, const sf::Window& window) {
 
 	glm::mat4 view;
 	view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-	glUniformMatrix4fv(_uView, 1, GL_FALSE, glm::value_ptr(view));
+	glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
 }
-
 
 void updateGPUData(int numberOfVertices) {
 	//TUTAJ JEST ILOSC PUNKTOW
@@ -222,7 +228,7 @@ void updateGPUData(int numberOfVertices) {
 
 	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * numberOfVertices * 6, vertices, GL_STATIC_DRAW);
 
-	delete [] vertices;
+	delete[] vertices;
 
 }
 
@@ -331,7 +337,7 @@ void loadModelOBJ(int& points, const char* filename, int buffer) {
 	for (int i = 0; i < vert_num; i++)
 		delete[] trian[i];
 	delete[] trian;
-}  
+}
 
 void loadModelOBJ_EBO(int& points, const char* filename, int buffer_vbo, int buffer_ebo) {
 	int vert_num = 0;
@@ -353,7 +359,7 @@ void loadModelOBJ_EBO(int& points, const char* filename, int buffer_vbo, int buf
 	file.close();
 	file.open(filename);
 
-	float* vert = new float[vert_num*3];
+	float* vert = new float[vert_num * 3];
 	int* elem = new int[trian_num * 3];
 
 
@@ -370,7 +376,7 @@ void loadModelOBJ_EBO(int& points, const char* filename, int buffer_vbo, int buf
 		}
 		if (output == "f") {
 			for (int i = 0; i < 3; i++) {
-				file >> tmp; 
+				file >> tmp;
 				elem[elem_counter++] = (tmp - 1);
 			}
 		}
@@ -389,6 +395,167 @@ void loadModelOBJ_EBO(int& points, const char* filename, int buffer_vbo, int buf
 	delete[] elem;
 }
 
+void loadModelOBJNormalCoords(int& points, const char* filename, int buffer, std::vector<std::vector<int>>& objects) {
+	int vert_num = 0;
+	int triangles = 0;
+	int normals = 0;
+	int coord_num = 0;
+	std::ifstream myReadFile;
+	myReadFile.open(filename);
+	std::string output;
+	if (myReadFile.is_open()) {
+		while (!myReadFile.eof()) {
+			myReadFile >> output;
+			if (output == "v") vert_num++;
+			if (output == "f") triangles++;
+			if (output == "vn") normals++;
+			if (output == "vt") coord_num++;
+			if (output == "o") {
+				if (objects.size() == 0) {
+					objects.push_back({ 0 });
+				}
+				else {
+					objects.back().push_back(triangles * 3 - objects.back()[0]);
+					objects.push_back({ triangles * 3 });
+				}
+			}
+		}
+		objects.back().push_back(triangles * 3 - objects.back()[0]);
+	}
+
+	myReadFile.close();
+	myReadFile.open(filename);
+
+
+	float** vert;
+	vert = new float* [vert_num]; //przydzielenie pamiêci na w wierszy
+
+	for (int i = 0; i < vert_num; i++)
+		vert[i] = new float[3];
+
+
+	int** trian;
+	trian = new int* [triangles]; //przydzielenie pamiêci na w wierszy
+
+	for (int i = 0; i < triangles; i++)
+		trian[i] = new int[9];
+
+	float** norm;
+	norm = new float* [normals]; //przydzielenie pamiêci na w wierszy
+
+	for (int i = 0; i < normals; i++)
+		norm[i] = new float[3];
+
+	float** coord;
+	coord = new float* [coord_num]; //przydzielenie pamiêci na w wierszy
+
+	for (int i = 0; i < coord_num; i++)
+		coord[i] = new float[2];
+
+	int licz_vert = 0;
+	int licz_triang = 0;
+	int licz_normals = 0;
+	int licz_coord = 0;
+
+
+	while (!myReadFile.eof()) {
+		output = "";
+		myReadFile >> output;
+		if (output == "vn") { myReadFile >> norm[licz_normals][0]; myReadFile >> norm[licz_normals][1]; myReadFile >> norm[licz_normals][2]; licz_normals++; }
+		if (output == "v") { myReadFile >> vert[licz_vert][0]; myReadFile >> vert[licz_vert][1]; myReadFile >> vert[licz_vert][2]; licz_vert++; }
+		if (output == "vt") { myReadFile >> coord[licz_coord][0]; myReadFile >> coord[licz_coord][1]; licz_coord++; }
+		if (output == "f") {
+
+			for (int i = 0; i < 9; i += 3)
+			{
+				std::string s;
+				myReadFile >> s;
+				std::stringstream ss(s);
+
+				std::vector <std::string> el;
+				std::string item;
+
+
+				while (getline(ss, item, '/')) {
+					el.push_back(item);
+				}
+				trian[licz_triang][i] = std::stoi(el[0]);
+				trian[licz_triang][i + 1] = std::stoi(el[1]);
+				trian[licz_triang][i + 2] = std::stoi(el[2]);
+
+
+			}
+			licz_triang++;
+		}
+	}
+	GLfloat* vertices = new GLfloat[triangles * 24];
+
+	int vert_current = 0;
+
+	for (int i = 0; i < triangles; i++)
+	{
+		vertices[vert_current] = vert[trian[i][0] - 1][0];
+		vertices[vert_current + 1] = vert[trian[i][0] - 1][1];
+		vertices[vert_current + 2] = vert[trian[i][0] - 1][2];
+		vertices[vert_current + 3] = norm[trian[i][2] - 1][0];
+		vertices[vert_current + 4] = norm[trian[i][2] - 1][1];
+		vertices[vert_current + 5] = norm[trian[i][2] - 1][2];
+		vertices[vert_current + 6] = coord[trian[i][1] - 1][0];
+		vertices[vert_current + 7] = coord[trian[i][1] - 1][1];
+
+		vertices[vert_current + 8] = vert[trian[i][3] - 1][0];
+		vertices[vert_current + 9] = vert[trian[i][3] - 1][1];
+		vertices[vert_current + 10] = vert[trian[i][3] - 1][2];
+		vertices[vert_current + 11] = norm[trian[i][5] - 1][0];
+		vertices[vert_current + 12] = norm[trian[i][5] - 1][1];
+		vertices[vert_current + 13] = norm[trian[i][5] - 1][2];
+		vertices[vert_current + 14] = coord[trian[i][4] - 1][0];
+		vertices[vert_current + 15] = coord[trian[i][4] - 1][1];
+
+		vertices[vert_current + 16] = vert[trian[i][6] - 1][0];
+		vertices[vert_current + 17] = vert[trian[i][6] - 1][1];
+		vertices[vert_current + 18] = vert[trian[i][6] - 1][2];
+		vertices[vert_current + 19] = norm[trian[i][8] - 1][0];
+		vertices[vert_current + 20] = norm[trian[i][8] - 1][1];
+		vertices[vert_current + 21] = norm[trian[i][8] - 1][2];
+		vertices[vert_current + 22] = coord[trian[i][7] - 1][0];
+		vertices[vert_current + 23] = coord[trian[i][7] - 1][1];
+
+		vert_current += 24;
+	}
+
+	for (auto i : objects) {
+		for (auto j : i)
+			std::cout << j << ' ';
+		std::cout << std::endl;
+	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, buffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * triangles * 24, vertices, GL_STATIC_DRAW);
+
+	points = triangles * 3;
+
+	delete vertices;
+
+
+
+
+	for (int i = 0; i < vert_num; i++)
+		delete[] vert[i];
+	delete[] vert;
+
+	for (int i = 0; i < triangles; i++)
+		delete[] trian[i];
+	delete[] trian;
+
+	for (int i = 0; i < normals; i++)
+		delete[] norm[i];
+	delete[] norm;
+
+	for (int i = 0; i < coord_num; i++)
+		delete[] coord[i];
+	delete[] coord;
+}
 
 int main()
 {
@@ -397,36 +564,33 @@ int main()
 	settings.stencilBits = 8;
 
 	// Okno renderingu
-	sf::Window window(sf::VideoMode(800, 800, 32), "Tomasz_Ligeza_GK", sf::Style::Titlebar | sf::Style::Close, settings);
-	//sf::Window window(sf::VideoMode(1920, 1080, 32), "Tomasz_Ligeza_GK", sf::Style::Fullscreen | sf::Style::Close, settings);
+	sf::Window window(sf::VideoMode(800, 800, 32), "Tomasz_Ligeza_OPEN_GL", sf::Style::Titlebar | sf::Style::Close, settings);
 	window.setFramerateLimit(60);
 	window.setMouseCursorGrabbed(true);
 	window.setMouseCursorVisible(false);
-
 	// Inicjalizacja GLEW
 	glewExperimental = GL_TRUE;
-	glewInit();
+	GLenum err = glewInit();
+
+	if (GLEW_OK != err)
+	{
+		std::cout << "glew - starting error\n";
+		return 1;
+	}
 
 	// Utworzenie VAO (Vertex Array Object)
 	GLuint vao;
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 
-
-	int points = 0;
-
-	GLuint ebo;
-	glGenBuffers(1, &ebo);
-	
-
-
 	// Utworzenie VBO (Vertex Buffer Object)
 	// i skopiowanie do niego danych wierzcho³kowych
 	GLuint vbo;
 	glGenBuffers(1, &vbo);
 
-	loadModelOBJ(points, "object/scene.obj", vbo);
-	//cube(vbo);
+	int numberOfPoints = 0;
+	std::vector<std::vector<int>> objects;
+	loadModelOBJNormalCoords(numberOfPoints, "objects/scene.obj", vbo, objects);
 
 	// Utworzenie i skompilowanie shadera wierzcho³ków
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -454,7 +618,7 @@ int main()
 	glCompileShader(fragmentShader);
 
 	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &status);
-	
+
 	//W ZASADZIE POWTARZAM KOD POWY¯EJ Z DROBNYMI ZMIANAMI 
 	if (!status) {
 		std::cout << "fragmentShader - compilation failed\n";
@@ -468,114 +632,158 @@ int main()
 		std::cout << "fragmentShader - compilation success\n";
 	}
 
-
 	// Zlinkowanie obu shaderów w jeden wspólny program
 	GLuint shaderProgram = glCreateProgram();
 	glAttachShader(shaderProgram, vertexShader);
 	glAttachShader(shaderProgram, fragmentShader);
-
+	glBindFragDataLocation(shaderProgram, 0, "outColor");
 	glLinkProgram(shaderProgram);
 	glUseProgram(shaderProgram);
 
-
 	// Specifikacja formatu danych wierzcho³kowych
-
 	GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
 	glEnableVertexAttribArray(posAttrib);
-	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), 0);
-
-	GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
+	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), 0);
+	/*GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
 	glEnableVertexAttribArray(colAttrib);
-	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
-
-	GLint TexCoords = glGetAttribLocation(shaderProgram, "aTexCoord");
-	glEnableVertexAttribArray(TexCoords);
-	glVertexAttribPointer(TexCoords, 2, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
-
+	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));*/
+	GLint TexCoord = glGetAttribLocation(shaderProgram, "aTexCoord");
+	glEnableVertexAttribArray(TexCoord);
+	glVertexAttribPointer(TexCoord, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
 
 	glm::mat4 model = glm::mat4(1.0f);
-	model = glm::rotate(model, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
+	//model = glm::rotate(model, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	GLint uniTrans = glGetUniformLocation(shaderProgram, "model");
 	glUniformMatrix4fv(uniTrans, 1, GL_FALSE, glm::value_ptr(model));
 
+	//glm::mat4 view;
+	//view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+
 	GLint uniView = glGetUniformLocation(shaderProgram, "view");
+	//glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
 
 	glm::mat4 proj = glm::perspective(glm::radians(45.0f), 800.0f / 800.0f, 0.06f, 100.0f);
 	GLint uniProj = glGetUniformLocation(shaderProgram, "proj");
+
 	glUniformMatrix4fv(uniProj, 1, GL_FALSE, glm::value_ptr(proj));
 
+	GLenum primitive = GL_TRIANGLES;
+	int mouse_y = 3;
 	glEnable(GL_DEPTH_TEST);
 
-	unsigned int texture1;
-	glGenTextures(1, &texture1);
-	glBindTexture(GL_TEXTURE_2D, texture1);
+	//TUTAJ TEXTURY
 
+	unsigned int metalTex;
+	glGenTextures(1, &metalTex);
+	glBindTexture(GL_TEXTURE_2D, metalTex);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	int width;
-	int height;
-	int nrChannel;
-
+	int width, height, nrChannels;
 	stbi_set_flip_vertically_on_load(true);
-
-	unsigned char* data = stbi_load("textures/1.jpg", &width, &height, &nrChannel, 0);
-
+	unsigned char* data = stbi_load("textures/metal.bmp", &width, &height, &nrChannels, 0);
 	if (data) {
+		std::cout << "loaded texture successfully" << std::endl;
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 		glGenerateMipmap(GL_TEXTURE_2D);
 	}
 	else {
-		std::cout << "something went wrong\n";
+		std::cout << "FAILED TO LOAD TEXTURE" << std::endl;
 	}
-	stbi_image_free(data);	
 
-	unsigned int texture2;
-	glGenTextures(1, &texture2);
-	glBindTexture(GL_TEXTURE_2D, texture2);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	stbi_set_flip_vertically_on_load(true);
-
-	data = stbi_load("textures/2.jpg", &width, &height, &nrChannel, 0);
-
-	if (data) {
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-	}
-	else {
-		std::cout << "something went wrong\n";
-	}
 	stbi_image_free(data);
 
-	glUniform1f(glGetUniformLocation(shaderProgram, "texture1"), 0);
-	glUniform1f(glGetUniformLocation(shaderProgram, "texture2"), 1);
+	unsigned int mapTex;
+	glGenTextures(1, &mapTex);
+	glBindTexture(GL_TEXTURE_2D, mapTex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+
+	stbi_set_flip_vertically_on_load(true);
+	data = stbi_load("textures/map.jpg", &width, &height, &nrChannels, 0);
+	if (data) {
+		std::cout << "loaded texture successfully" << std::endl;
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+	else {
+		std::cout << "FAILED TO LOAD TEXTURE" << std::endl;
+	}
+
+	stbi_image_free(data);
+
+	unsigned int woodTex;
+	glGenTextures(1, &woodTex);
+	glBindTexture(GL_TEXTURE_2D, woodTex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+
+	stbi_set_flip_vertically_on_load(true);
+	data = stbi_load("textures/wood.jpg", &width, &height, &nrChannels, 0);
+	if (data) {
+		std::cout << "loaded texture successfully" << std::endl;
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+	else {
+		std::cout << "FAILED TO LOAD TEXTURE" << std::endl;
+	}
+
+	stbi_image_free(data);
+
+	unsigned int imageTex;
+	glGenTextures(1, &imageTex);
+	glBindTexture(GL_TEXTURE_2D, imageTex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+
+	stbi_set_flip_vertically_on_load(true);
+	data = stbi_load("textures/image.bmp", &width, &height, &nrChannels, 0);
+	if (data) {
+		std::cout << "loaded texture successfully" << std::endl;
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+	else {
+		std::cout << "FAILED TO LOAD TEXTURE" << std::endl;
+	}
+
+	stbi_image_free(data);
+
+	//glUniform1i(glGetUniformLocation(shaderProgram, "metalTex"), 0);
+	//glUniform1i(glGetUniformLocation(shaderProgram, "pieselTex"), 1);
+	//glUniform1i(glGetUniformLocation(shaderProgram, "woodTex"), 2);
+	//glUniform1i(glGetUniformLocation(shaderProgram, "obrazTex"), 3);
+
+
+	// Rozpoczêcie pêtli zdarzeñ
+	bool running = true;
+	float dist = 13;
+	int mode = 2;
 
 	sf::Clock clock;
-	double deltaTime = 0.f;
-
+	sf::Time time;
 	int counter = 0;
-	int primitive = GL_POINTS;
-	// Rozpoczêcie pêtli zdarzeñ
 
-	int mode = 3;
-	float dist = 13;
-	float zeroPlane = 0;
-	float eye = 0.05;
-
-
-	bool running = true;
 	while (running) {
+		time = clock.restart();
+		counter++;
+		float fps = 1 / time.asSeconds();
+		if (counter > fps) {
+			window.setTitle("Tomasz_Ligeza_OPEN_GL: " + std::to_string(fps));
+			counter = 0;
+		}
 		sf::Event windowEvent;
 		while (window.pollEvent(windowEvent)) {
 			switch (windowEvent.type) {
@@ -583,157 +791,90 @@ int main()
 				running = false;
 				break;
 			case sf::Event::KeyPressed:
+				
 				switch (windowEvent.key.code) {
-				case sf::Keyboard::Escape: {
+				case sf::Keyboard::Escape:
 					running = false;
-					break;
-				}
-				//	F1-F10
-				{
-				case sf::Keyboard::F1: {
-					primitive = GL_POINTS;
-					break;
-				}
-				case sf::Keyboard::F2: {
-					primitive = GL_LINES;
-					break;
-				}
-				case sf::Keyboard::F3: {
-					primitive = GL_LINE_STRIP;
-					break;
-				}
-				case sf::Keyboard::F4: {
-					primitive = GL_LINE_LOOP;
-					break;
-				}
-				case sf::Keyboard::F5: {
-					primitive = GL_TRIANGLES;
-					break;
-				}
-				case sf::Keyboard::F6: {
-					primitive = GL_TRIANGLE_STRIP;
-					break;
-				}
-				case sf::Keyboard::F7: {
-					primitive = GL_TRIANGLE_FAN;
-					break;
-				}
-				case sf::Keyboard::F8: {
-					primitive = GL_QUADS;
-					break;
-				}
-				case sf::Keyboard::F9: {
-					primitive = GL_QUAD_STRIP;
-					break;
-				}
-				case sf::Keyboard::F10: {
-					primitive = GL_POLYGON;
-					break;
-				}
-				case sf::Keyboard::Q:
-					dist += 0.1;
-					break;
-				case sf::Keyboard::W:
-					dist -= 0.1;
-					break;
-				case sf::Keyboard::A:
-					zeroPlane += 0.1;
-					break;
-				case sf::Keyboard::S:
-					zeroPlane -= 0.1;
-					break;
-				case sf::Keyboard::Z:
-					eye += 0.005;
-					break;
-				case sf::Keyboard::X:
-					eye -= 0.005;
-					break;
 				case sf::Keyboard::Num1:
-					mode = 1;
+					mode = 0;
 					break;
 				case sf::Keyboard::Num2:
-					mode = 2;
+					mode = 1;
 					break;
 				case sf::Keyboard::Num3:
-					mode = 3;
+					mode = 2;
+					break;
+				case sf::Keyboard::J:
+					dist += 0.01;
+					break;
+				case sf::Keyboard::K:
+					dist -= 0.01;
 					break;
 				}
-				}
 				break;
+			case sf::Event::MouseMoved:
+				moveCamByMouse(uniView, time.asMicroseconds(), window);
+				break;
+
 			}
 		}
-
-		counter++;
-		deltaTime = clock.restart().asSeconds();
-
-		float fps = 1 / deltaTime;
-		if (counter >= fps) {
-			window.setTitle(std::to_string(fps));
-			counter = 0;
-		}
-
-		setCam(uniView, deltaTime, window);
+		moveCamByKeyboard(uniView, time.asMicroseconds());
 
 		// Nadanie scenie koloru czarnego
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+
+		//glActiveTexture(GL_TEXTURE0);
+		//glBindTexture(GL_TEXTURE_2D, texture1);
+		//glActiveTexture(GL_TEXTURE1);
+		//glBindTexture(GL_TEXTURE_2D, texture2);
+
+
 		switch (mode) {
-		case 1:
+		case 0:
 			glViewport(0, 0, window.getSize().x, window.getSize().y);
 			glDrawBuffer(GL_BACK_LEFT);
-			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, zeroPlane, dist, eye);
-			
+			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, 0, dist, -0.05);
 			glColorMask(true, false, false, false);
-
-			glBindTexture(GL_TEXTURE_2D, texture1);
-			glDrawArrays(primitive, 0, 12);
-
-			glBindTexture(GL_TEXTURE_2D, texture2);
-			glDrawArrays(primitive, 12, 36);
+			glDrawArrays(primitive, 0, numberOfPoints);
 
 			glClear(GL_DEPTH_BUFFER_BIT);
 			glDrawBuffer(GL_BACK_RIGHT);
-			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, zeroPlane, dist, -eye);
-			
+			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, 0, dist, 0.05);
 			glColorMask(false, false, true, false);
-
-			glBindTexture(GL_TEXTURE_2D, texture1);
-			glDrawArrays(primitive, 0, 12);
-
-			glBindTexture(GL_TEXTURE_2D, texture2);
-			glDrawArrays(primitive, 12, 36);
+			glDrawArrays(primitive, 0, numberOfPoints);
 			glColorMask(true, true, true, true);
 			break;
-		case 2:
+		case 1:
 			glViewport(0, 0, window.getSize().x / 2, window.getSize().y);
-			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, zeroPlane, dist, eye);
-
-			glBindTexture(GL_TEXTURE_2D, texture1);
-			glDrawArrays(primitive, 0, 12);
-			glBindTexture(GL_TEXTURE_2D, texture2);
-			glDrawArrays(primitive, 12, 36);
+			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, 0, 13, -0.05);
+			glDrawArrays(primitive, 0, 24);
 
 			glViewport(window.getSize().x / 2, 0, window.getSize().x / 2, window.getSize().y);
-			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, zeroPlane, dist, -eye);
-			glBindTexture(GL_TEXTURE_2D, texture1);
-			glDrawArrays(primitive, 0, 12);
-			glBindTexture(GL_TEXTURE_2D, texture2);
-			glDrawArrays(primitive, 12, 36);
+			StereoProjection(shaderProgram, -6, 6, -4.8, 4.8, 12.99, -100, 0, 13, 0.05);
+
+			glDrawArrays(primitive, 0, 24);
 			break;
-		case 3:
+		case 2:
+			glActiveTexture(GL_TEXTURE_2D);
 			glViewport(0, 0, window.getSize().x, window.getSize().y);
 
-			glDrawArrays(primitive, 0, points);
-			glDrawElements(primitive, points, GL_UNSIGNED_INT, 0);
+			glBindTexture(GL_TEXTURE_2D, woodTex);
+			glDrawArrays(primitive, objects[0][0], objects[0][1]);
+
+			glBindTexture(GL_TEXTURE_2D, metalTex);
+			glDrawArrays(primitive, objects[1][0], objects[1][1]);
+
+			glBindTexture(GL_TEXTURE_2D, imageTex);
+			glDrawArrays(primitive, objects[2][0], objects[2][1]);
+
+			glBindTexture(GL_TEXTURE_2D, mapTex);
+			glDrawArrays(primitive, objects[3][0], objects[3][1]);
 			break;
 		}
-
-		// Wymiana buforów tylni/przedni
 		window.display();
 	}
-
-
 	// Kasowanie programu i czyszczenie buforów
 	glDeleteProgram(shaderProgram);
 	glDeleteShader(fragmentShader);
@@ -742,6 +883,5 @@ int main()
 	glDeleteVertexArrays(1, &vao);
 	// Zamkniêcie okna renderingu
 	window.close();
-
 	return 0;
 }
